@@ -276,7 +276,7 @@ def get_features_and_targets(pics_folder,data_file,data_folder='./data_go',width
                 [posA[::-1], posB[::-1], posC[::-1], posD[::-1]])
 
         img_t = pil_im.transform((width, height), Image.PERSPECTIVE, coeffs,
-                Image.BICUBIC).filter(ImageFilter.RankFilter(3, 0))
+                Image.BICUBIC)#.filter(ImageFilter.RankFilter(3, 0))
 
         classes = np.zeros(361)
 
@@ -342,7 +342,7 @@ def get_features(arr_im,pos_corners,width=1000,height=None,landscape=True):
                 [posA[::-1], posB[::-1], posC[::-1], posD[::-1]])
 
     img_t = pil_im.transform((width, height), Image.PERSPECTIVE, coeffs,
-                             Image.BICUBIC).filter(ImageFilter.RankFilter(3, 0))
+                             Image.BICUBIC)#.filter(ImageFilter.RankFilter(3, 0))
 
     arr_im = np.array(img_t)
 

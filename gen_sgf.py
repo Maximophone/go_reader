@@ -3,12 +3,17 @@ import argparse
 import cv2
 import numpy as np
 import datetime as dt
+import time
 
 from functions import get_corners, get_board_surface, get_features
-from models import conv_large
+from models import conv_large, conv_small
+
+models_dict = {
+    "conv_large":conv_large,
+    "conv_small":conv_small}
 
 pygame.font.init()
-myfont = pygame.font.SysFont('Arial', 30)
+myfont = pygame.font.SysFont('Arial', 20)
 
 class DiffError(Exception):
     pass
@@ -59,15 +64,7 @@ PW[{}]
 {})""".format(name_black,name_white,game_string)
     return final_string
 
-def main(args):
-
-    print "Loading model"
-    model = conv_large.build()
-    model.load_weights(args.model_weights)
-
-    vc = init_vc(args.vc_input)
-    pygame.init()
-
+def calibration(vc):
     # First adjust the camera
     camera_ready = False
     screen = pygame.display.set_mode(read_vc(vc).shape[:2])
@@ -86,6 +83,19 @@ def main(args):
     # Then get the corners positions
     pos_corners = get_corners(np.swapaxes(frame,0,1),height=562)
 
+    return pos_corners
+
+def main(args):
+
+    print "Loading model"
+    model = models_dict[args.model_name].build()
+    model.load_weights(args.model_weights)
+
+    vc = init_vc(args.vc_input)
+    pygame.init()
+
+    pos_corners = calibration(vc)
+    
     # Start the diff process
     prev_black = set()
     prev_white = set()
@@ -96,7 +106,9 @@ def main(args):
 
     while not game_over:
         frame = np.swapaxes(read_vc(vc),0,1)
+        t0 = time.time()
         features, new_image = get_features(frame, pos_corners, height=562)
+        t1 = time.time()
         if not init:
             pygame.init()
             width, height = new_image.shape[:2]
@@ -104,7 +116,9 @@ def main(args):
             init = True
         
         classes = model.predict(features).argmax(axis=1)
-
+        
+        t2 = time.time()
+        
         black = set([(i%19,i/19) for i,cl in enumerate(classes) if cl==2])
         white = set([(i%19,i/19) for i,cl in enumerate(classes) if cl==1])
 
@@ -135,13 +149,25 @@ def main(args):
         pygame.transform.smoothscale(global_surf, (args.screen_res,args.screen_res), screen)
         pygame.display.flip()
 
+        t3 = time.time()
+        print "Times: {:.2f}, {:.2f}, {:.2f}".format(t1-t0,t2-t1,t3-t2)
+
+        recalibrate = False
         events = pygame.event.get()
         for event in events:
             if event.type == pygame.KEYDOWN and event.key==pygame.K_ESCAPE:
                 game_over = True
+            elif event.type == pygame.KEYDOWN and event.key==pygame.K_c:
+                recalibrate = True
             elif event.type == pygame.KEYDOWN and not diff_error:
                 moves_list.append((col,move))
                 prev_black, prev_white = black, white
+        if recalibrate:
+            pygame.quit()
+            pygame.init()
+            pos_corners = calibration(vc)
+            init = False
+            
 
     sgf_string = gen_sgf_string(moves_list, args.name_black, args.name_white)
     with open(args.folder+'/'+args.filename,'w') as f:
@@ -150,11 +176,12 @@ def main(args):
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--vc-input",type=int,default=1)
-    parser.add_argument("--model-weights",type=str,default="./saved_models/model_best_3.h5")
+    parser.add_argument("--model-weights",type=str,default="./saved_models/model_best_5.h5")
     parser.add_argument("--filename",type=str,default="savegame_{}.sgf".format(dt.datetime.now().strftime("%Y%m%d_%H:%M")))
     parser.add_argument("--folder",type=str,default="/home/max/sgf")
     parser.add_argument("--name-black",type=str,default="Black")
     parser.add_argument("--name-white",type=str,default="White")
     parser.add_argument("--screen-res",type=int,default=1000)
+    parser.add_argument("--model-name",type=str,default="conv_small")
     args = parser.parse_args()
     main(args)
